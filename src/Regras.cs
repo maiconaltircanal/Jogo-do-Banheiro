@@ -58,6 +58,12 @@ namespace JogoDoBanheiro
             get { for (int i = 0; i < N; i++) if (IsSafe(i)) return true; return false; }
         }
 
+        // Colou em alguém numa cena em que a única saída era a cabine.
+        public bool IgnorouCabine
+        {
+            get { return Grave && HasStall && !HasSafeUrinal; }
+        }
+
         // Distância até o ocupado mais próximo; as pontas ganham meio ponto (parede de um lado).
         public double Safety(int i)
         {
@@ -219,6 +225,7 @@ namespace JogoDoBanheiro
         public int Maximo;
         public bool Grave;
         public int CenaGrave = -1;
+        public bool DicaCabine;    // reprovou por colar em alguém quando a cabine era a saída
         public int Nivel;          // 0..3 = ranking; 4 = reprovado
         public string Titulo;
         public string Mensagem;
@@ -236,6 +243,7 @@ namespace JogoDoBanheiro
             {
                 r.Total += scenes[i].Points;
                 if (scenes[i].Grave && !r.Grave) { r.Grave = true; r.CenaGrave = i; }
+                if (scenes[i].IgnorouCabine) r.DicaCabine = true;
             }
 
             r.Nivel = 4;

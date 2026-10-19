@@ -55,6 +55,23 @@ $x = Rank @(30,30,30,30,30);        Check "150 = SUSPEITO" ($x.Nivel -eq 3)
 $x = Rank @(30,30,30,30,0);         Check "120 = reprovado por pontos" ($x.Nivel -eq 4 -and $x.Mensagem -eq $cfg.DetalheReprovadoPontos)
 $x = Rank @(120,120,120,120,0) 4;   Check "480 com falta grave = reprovado" ($x.Nivel -eq 4 -and $x.Grave -and $x.CenaGrave -eq 4 -and $x.Mensagem -eq $cfg.DetalheReprovado)
 
+"Dica da cabine:"
+function Partida($cenas) {
+    $l = New-Object 'System.Collections.Generic.List[JogoDoBanheiro.Scene]'
+    foreach ($c in $cenas) { $l.Add($c) }
+    return [JogoDoBanheiro.Ranking]::Calcular($l, $cfg)
+}
+$soCabine = Avaliar (Cena "X_X_X" $true) 1
+Check "colou quando so a cabine salvava = IgnorouCabine" ($soCabine.IgnorouCabine)
+$x = Partida @($soCabine, (Avaliar (Cena "X___X") 2))
+Check "reprovado por ignorar a cabine mostra a dica" ($x.Nivel -eq 4 -and $x.DicaCabine)
+$x = Partida @((Avaliar (Cena "X_X_X" $true) 1000), (Avaliar (Cena "X___X") 1))
+Check "reprovado por colar em cena normal NAO mostra a dica" ($x.Nivel -eq 4 -and -not $x.DicaCabine)
+$x = Partida @((Avaliar (Cena "X_X_X" $true) -2), (Avaliar (Cena "_____") 2))
+Check "tempo esgotado na cena da cabine NAO mostra a dica" (-not $x.DicaCabine)
+$x = Partida @((Avaliar (Cena "X_X_X" $false) 1))
+Check "colou sem cabine na cena NAO mostra a dica" (-not $x.DicaCabine)
+
 "Sorteio (3000 partidas):"
 $rnd = New-Object Random 123
 $erros = @{}

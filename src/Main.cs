@@ -468,29 +468,54 @@ namespace JogoDoBanheiro
             using (SolidBrush wall = new SolidBrush(Color.FromArgb(70, 95, 105)))
                 g.FillRectangle(wall, r.X, r.Y, r.Width, r.Height - 24);
             RectangleF door = new RectangleF(r.X + 14, r.Y + 14, r.Width - 28, r.Height - 44);
-            using (LinearGradientBrush lg = new LinearGradientBrush(door, Color.FromArgb(120, 155, 170), Color.FromArgb(85, 115, 128), LinearGradientMode.Horizontal))
-                g.FillRectangle(lg, door);
+
+            // vão da porta: escuro por dentro (aparece na fresta quando a porta está entreaberta)
+            using (LinearGradientBrush inside = new LinearGradientBrush(door, Color.FromArgb(18, 24, 28), Color.FromArgb(48, 60, 66), LinearGradientMode.Vertical))
+                g.FillRectangle(inside, door);
+
+            // porta: fechada quando você entra; entreaberta (girando para dentro) quando está livre
+            float gapW = occupiedByPlayer ? 0 : 30;
+            float inset = occupiedByPlayer ? 0 : 7;
+            PointF[] panel = {
+                new PointF(door.X, door.Y),
+                new PointF(door.Right - gapW, door.Y + inset),
+                new PointF(door.Right - gapW, door.Bottom - inset),
+                new PointF(door.X, door.Bottom)
+            };
+            using (LinearGradientBrush lg = new LinearGradientBrush(door, Color.FromArgb(125, 160, 175), Color.FromArgb(80, 110, 122), LinearGradientMode.Horizontal))
+                g.FillPolygon(lg, panel);
             using (Pen pen = new Pen(Color.FromArgb(45, 65, 72), 3))
+            {
+                g.DrawPolygon(pen, panel);
                 g.DrawRectangle(pen, door.X, door.Y, door.Width, door.Height);
+            }
             // vão embaixo da porta
             using (SolidBrush legs = new SolidBrush(Color.FromArgb(45, 65, 72)))
             {
                 g.FillRectangle(legs, r.X, r.Bottom - 24, 10, 24);
                 g.FillRectangle(legs, r.Right - 10, r.Bottom - 24, 10, 24);
             }
-            // placa e trinco
-            RectangleF sign = new RectangleF(door.X + door.Width / 2 - 26, door.Y + 30, 52, 30);
+
+            float panelW = door.Width - gapW;
+            float pcx = door.X + panelW / 2;
+            RectangleF sign = new RectangleF(pcx - 24, door.Y + 26, 48, 28);
             FillRound(g, sign, 6, Color.White);
             DrawText(g, "WC", fSmall, Color.FromArgb(45, 65, 72), sign);
             using (SolidBrush handle = new SolidBrush(Color.FromArgb(210, 215, 220)))
-                g.FillRectangle(handle, door.Right - 22, door.Y + door.Height / 2 - 4, 14, 8);
-            RectangleF lockR = new RectangleF(door.Right - 30, door.Y + door.Height / 2 + 14, 24, 14);
-            FillRound(g, lockR, 4, occupiedByPlayer ? Color.FromArgb(210, 50, 50) : Color.FromArgb(60, 180, 90));
+                g.FillRectangle(handle, door.X + panelW - 20, door.Y + door.Height / 2 + 62, 12, 8);
+
+            // placa grande de LIVRE / OCUPADO
+            RectangleF status = new RectangleF(door.X + 8, door.Y + door.Height / 2 - 40, panelW - 16, 36);
+            FillRound(g, status, 8, occupiedByPlayer ? Color.FromArgb(205, 45, 45) : Color.FromArgb(45, 175, 85));
+            using (Pen sp = new Pen(Color.FromArgb(160, 255, 255, 255), 2))
+            using (GraphicsPath spp = RoundRect(status, 8))
+                g.DrawPath(sp, spp);
+            DrawText(g, occupiedByPlayer ? "OCUPADO" : "LIVRE", occupiedByPlayer ? fSmall : fMedB, Color.White, status);
 
             DrawText(g, "CABINE", fTiny, Color.White, new RectangleF(r.X, r.Y - 2, r.Width, 18));
             if (occupiedByPlayer)
             {
-                YouTag(g, r.X + r.Width / 2, door.Y + door.Height / 2 - 14);
+                YouTag(g, r.X + r.Width / 2, door.Y + door.Height / 2 + 12);
                 // pés aparecendo embaixo da porta
                 using (SolidBrush shoe = new SolidBrush(Color.FromArgb(25, 25, 25)))
                 {
@@ -673,7 +698,15 @@ namespace JogoDoBanheiro
             if (r.Grave) placar += "   •   Falta grave na cena " + (r.CenaGrave + 1);
             DrawText(g, placar, fMedB, Gold, new RectangleF(0, 164, W, 34));
 
-            float top = 210, rowH = Math.Min(64f, 385f / scenes.Count);
+            float top = 210;
+            if (r.DicaCabine)
+            {
+                RectangleF tip = new RectangleF(W / 2 - 400, 202, 800, 38);
+                FillRound(g, tip, 10, Color.FromArgb(220, 45, 140, 75));
+                DrawText(g, "Dica: quando todo mictório livre está colado em alguém, a CABINE é a saída honrosa.", fSmall, Color.White, tip);
+                top = 248;
+            }
+            float rowH = Math.Min(64f, (595f - top) / scenes.Count);
             for (int i = 0; i < scenes.Count; i++)
                 DrawResultRow(g, scenes[i], i, new RectangleF(90, top + i * rowH + 3, W - 180, rowH - 6));
 
@@ -706,7 +739,8 @@ namespace JogoDoBanheiro
                 DrawText(g, "C", fTiny, Color.FromArgb(30, 40, 45), st);
             }
 
-            string comment = s.Comment + (s.Bonus ? "  + Decidido" : "");
+            string comment = s.IgnorouCabine ? "Colou no parceiro — a cabine estava livre!"
+                           : s.Comment + (s.Bonus ? "  + Decidido" : "");
             Color cc = s.Grave ? Color.FromArgb(255, 110, 180)
                      : s.Points >= 100 ? Color.FromArgb(90, 220, 120)
                      : s.Points > 0 ? Color.FromArgb(240, 200, 90)
@@ -731,6 +765,8 @@ namespace JogoDoBanheiro
                     foreach (Scene s in f.scenes)
                     {
                         if (mode == "result-bom") s.Chosen = BestChoice(s);
+                        else if (mode == "result-cabine")
+                            s.Chosen = s.Kind == SceneKind.SoCabine ? Array.IndexOf(s.Occupied, false) : BestChoice(s);
                         else
                         {
                             List<int> options = new List<int>();
@@ -748,14 +784,14 @@ namespace JogoDoBanheiro
                 else
                 {
                     SceneKind kind = mode == "vazio" ? SceneKind.Vazio : mode == "divisorias" ? SceneKind.Divisorias
-                                   : mode == "socabine" ? SceneKind.SoCabine : SceneKind.Normal;
+                                   : (mode == "socabine" || mode == "cabine-ocupada") ? SceneKind.SoCabine : SceneKind.Normal;
                     f.current = Math.Max(0, f.scenes.FindIndex(delegate(Scene s) { return s.Kind == kind; }));
                     f.state = State.Playing;
                     f.previewElapsed = f.scenes[f.current].TimeLimit * 0.6;
-                    if (mode == "timeout")
+                    if (mode == "timeout" || mode == "cabine-ocupada")
                     {
                         Scene s = f.scenes[f.current];
-                        s.Chosen = Scene.TimeoutChoice;
+                        s.Chosen = mode == "timeout" ? Scene.TimeoutChoice : Scene.StallChoice;
                         s.ElapsedSeconds = s.TimeLimit;
                         s.Evaluate();
                         f.state = State.Chosen;
