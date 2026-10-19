@@ -8,11 +8,40 @@
 
 ![Tela do jogo](assets/tela-jogo.png)
 
-Jogo de PC (Windows) em que você entra no banheiro e escolhe em qual mictório vai mijar.
-São 5 cenas, cada uma com 2 a 10 mictórios e alguns já ocupados (sorteados a cada partida).
+Jogo de PC (Windows) em que você entra no banheiro e escolhe onde vai mijar — contra o relógio.
+São 5 cenas sorteadas a cada partida, com 2 a 10 mictórios:
 
-**Regra:** nunca escolha um mictório ao lado de um que está sendo usado.
-Acertou todas → veredito positivo. Errou qualquer uma → veredito negativo.
+- **1 banheiro vazio** — a ponta é o lugar certo; o do meio é coisa de quem se acha dono do banheiro.
+- **1 com divisórias** — com a placa no meio, pode ficar do lado.
+- **1 onde só a cabine salva** — todo mictório livre está colado em alguém.
+- **2 normais** — às vezes com cabine como opção (e armadilha).
+
+**Regra de ouro:** nunca fique colado em alguém sem divisória. É falta grave e reprovação direta.
+
+### Pontuação (por cena, até 120)
+
+| Escolha | Pontos |
+|---|---|
+| Mictório mais distante de todo mundo (ou a ponta, no banheiro vazio) | 100 |
+| Seguro, mas não o melhor / salvo pela divisória | 70 |
+| Banheiro vazio: um qualquer / o do meio | 60 / 30 |
+| Cabine quando não havia mictório seguro | 100 |
+| Cabine quando havia mictório seguro | 40 |
+| Colado em alguém | 0 + falta grave |
+| Tempo esgotado ("mijou na calça") | 0 |
+| **Bônus "Decidido"**: escolheu na primeira metade do tempo | +20 |
+
+O cronômetro começa em 6 segundos e cai um por cena (6, 5, 4, 3, 3).
+
+### Ranking (até 600 pontos)
+
+| Pontos | Título |
+|---|---|
+| 540+ | MACHO ALFA |
+| 420+ | MACHO |
+| 300+ | MACHO EM TREINAMENTO |
+| 150+ | SUSPEITO |
+| abaixo de 150 ou falta grave | reprovado |
 
 ## Instalar
 
@@ -36,7 +65,7 @@ Para abrir sem verificar atualização: `JogoDoBanheiro.exe --sem-atualizacao`.
 
 ## Como jogar
 
-- Clique no mictório escolhido.
+- Clique no mictório escolhido (ou na porta da cabine).
 - `Enter` começa / joga de novo, `Esc` sai.
 
 ## Personalizar
@@ -46,10 +75,15 @@ Na primeira execução é criado um `config.ini` ao lado do `.exe`. Nele dá par
 | Chave | O quê |
 |---|---|
 | `titulo`, `subtitulo` | Textos da tela inicial |
-| `msg_aprovado`, `detalhe_aprovado` | Veredito quando acerta tudo |
-| `msg_reprovado`, `detalhe_reprovado` | Veredito quando erra alguma |
+| `rank1_pontos` … `rank4_pontos` | Pontos mínimos de cada nível (valores para 5 cenas) |
+| `rank1_titulo` … `rank4_titulo`, `rank1_msg` … `rank4_msg` | Título e mensagem de cada nível |
+| `msg_reprovado`, `detalhe_reprovado` | Veredito de reprovação (falta grave) |
+| `detalhe_reprovado_pontos` | Mensagem de reprovação por pontos baixos |
 | `cenas` | Quantidade de cenas (1 a 10) |
 | `min_mictorios`, `max_mictorios` | Faixa de mictórios por cena (2 a 12) |
+| `tempo_inicial`, `tempo_minimo` | Cronômetro em segundos |
+
+> Quem já tinha um `config.ini` de uma versão anterior pode apagá-lo para ganhar o modelo novo com todas as chaves.
 
 ## Desenvolvimento
 
@@ -61,7 +95,11 @@ e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.
   e cria a Release com o instalador e o `sha256`. Os jogos instalados recebem a atualização ao abrir.
 
 ```
-src/Main.cs      jogo (regras, geração das cenas, desenho)
+src/Main.cs      tela do jogo (fluxo, cronômetro, desenho)
+src/Regras.cs    tipos de cena, sorteio, pontuação e ranking
+src/Config.cs    leitura do config.ini
+src/Sons.cs      tic-tac do cronômetro
+tools/testar-regras.ps1   testes de pontuação, ranking e sorteio
 src/Updater.cs   busca e instala atualizações a partir das Releases
 src/Versao.cs    número da versão (gravado pelo publicar.bat)
 assets/          ícone e imagens (tools\gerar-icone.ps1 redesenha o ícone)

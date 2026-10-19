@@ -1,195 +1,50 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.IO;
-using System.Text;
 using System.Windows.Forms;
 
 namespace JogoDoBanheiro
 {
-    // Textos e parâmetros do jogo. Lidos de config.ini (criado automaticamente ao lado do .exe).
-    public class Config
-    {
-        public string Titulo = "JOGO DO BANHEIRO";
-        public string Subtitulo = "Entre no banheiro e escolha onde você vai mijar.";
-        public string MsgAprovado = "MACHO!";
-        public string DetalheAprovado = "Respeitou o código sagrado do mictório em todas as cenas.";
-        public string MsgReprovado = "VOCÊ É GAY!";
-        public string DetalheReprovado = "Escolheu mictório colado em outro cara.";
-        public int Cenas = 5;
-        public int MinMictorios = 2;
-        public int MaxMictorios = 10;
-
-        public static Config Load(string path)
-        {
-            Config c = new Config();
-            try
-            {
-                if (!File.Exists(path))
-                {
-                    File.WriteAllText(path, c.ToIni(), new UTF8Encoding(true));
-                    return c;
-                }
-                foreach (string raw in File.ReadAllLines(path, Encoding.UTF8))
-                {
-                    string line = raw.Trim();
-                    if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";")) continue;
-                    int eq = line.IndexOf('=');
-                    if (eq <= 0) continue;
-                    string k = line.Substring(0, eq).Trim().ToLowerInvariant();
-                    string v = line.Substring(eq + 1).Trim().Replace("\\n", "\n");
-                    switch (k)
-                    {
-                        case "titulo": c.Titulo = v; break;
-                        case "subtitulo": c.Subtitulo = v; break;
-                        case "msg_aprovado": c.MsgAprovado = v; break;
-                        case "detalhe_aprovado": c.DetalheAprovado = v; break;
-                        case "msg_reprovado": c.MsgReprovado = v; break;
-                        case "detalhe_reprovado": c.DetalheReprovado = v; break;
-                        case "cenas": c.Cenas = ParseInt(v, c.Cenas, 1, 10); break;
-                        case "min_mictorios": c.MinMictorios = ParseInt(v, c.MinMictorios, 2, 12); break;
-                        case "max_mictorios": c.MaxMictorios = ParseInt(v, c.MaxMictorios, 2, 12); break;
-                    }
-                }
-                if (c.MaxMictorios < c.MinMictorios) c.MaxMictorios = c.MinMictorios;
-            }
-            catch { }
-            return c;
-        }
-
-        static int ParseInt(string s, int def, int min, int max)
-        {
-            int r;
-            if (!int.TryParse(s, out r)) return def;
-            return Math.Max(min, Math.Min(max, r));
-        }
-
-        public string ToIni()
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine("# Configuração do Jogo do Banheiro");
-            sb.AppendLine("# Edite os textos à vontade. Use \\n para quebrar linha.");
-            sb.AppendLine("titulo=" + Titulo);
-            sb.AppendLine("subtitulo=" + Subtitulo);
-            sb.AppendLine("msg_aprovado=" + MsgAprovado);
-            sb.AppendLine("detalhe_aprovado=" + DetalheAprovado);
-            sb.AppendLine("msg_reprovado=" + MsgReprovado);
-            sb.AppendLine("detalhe_reprovado=" + DetalheReprovado);
-            sb.AppendLine("# Quantidade de cenas (1 a 10)");
-            sb.AppendLine("cenas=" + Cenas);
-            sb.AppendLine("# Faixa de mictórios por cena (2 a 12)");
-            sb.AppendLine("min_mictorios=" + MinMictorios);
-            sb.AppendLine("max_mictorios=" + MaxMictorios);
-            return sb.ToString();
-        }
-    }
-
-    public class Scene
-    {
-        public int N;
-        public bool[] Occupied;
-        public Color[] Shirts;
-        public int Chosen = -1;
-
-        // Regra principal: nunca escolher um mictório ao lado de um que está sendo usado.
-        public bool IsAdjacentToOccupied(int i)
-        {
-            return (i > 0 && Occupied[i - 1]) || (i < N - 1 && Occupied[i + 1]);
-        }
-
-        public bool Correct
-        {
-            get { return Chosen >= 0 && !Occupied[Chosen] && !IsAdjacentToOccupied(Chosen); }
-        }
-
-        public int OccupiedCount
-        {
-            get { int c = 0; foreach (bool o in Occupied) if (o) c++; return c; }
-        }
-    }
-
-    public static class Generator
-    {
-        static readonly Color[] Palette = {
-            Color.FromArgb(200, 60, 60), Color.FromArgb(60, 120, 200), Color.FromArgb(70, 160, 90),
-            Color.FromArgb(150, 80, 170), Color.FromArgb(230, 130, 40), Color.FromArgb(60, 60, 70),
-            Color.FromArgb(40, 150, 160), Color.FromArgb(170, 110, 70)
-        };
-
-        public static List<Scene> MakeGame(Random rnd, int count, int min, int max)
-        {
-            // Tamanhos variados (sem repetir enquanto der), em ordem crescente de dificuldade.
-            List<int> sizes = new List<int>();
-            List<int> pool = new List<int>();
-            while (sizes.Count < count)
-            {
-                if (pool.Count == 0) for (int n = min; n <= max; n++) pool.Add(n);
-                int idx = rnd.Next(pool.Count);
-                sizes.Add(pool[idx]);
-                pool.RemoveAt(idx);
-            }
-            sizes.Sort();
-            List<Scene> scenes = new List<Scene>();
-            foreach (int n in sizes) scenes.Add(Make(rnd, n));
-            return scenes;
-        }
-
-        // Sorteia ocupados garantindo que exista pelo menos uma escolha certa
-        // e (quando possível) pelo menos uma armadilha colada em alguém.
-        public static Scene Make(Random rnd, int n)
-        {
-            while (true)
-            {
-                Scene s = new Scene();
-                s.N = n;
-                s.Occupied = new bool[n];
-                double p = 0.25 + rnd.NextDouble() * 0.35;
-                for (int i = 0; i < n; i++) s.Occupied[i] = rnd.NextDouble() < p;
-
-                int safe = 0, trap = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    if (s.Occupied[i]) continue;
-                    if (s.IsAdjacentToOccupied(i)) trap++; else safe++;
-                }
-                if (safe == 0) continue;
-                if (n >= 3 && (s.OccupiedCount == 0 || trap == 0)) continue;
-
-                s.Shirts = new Color[n];
-                for (int i = 0; i < n; i++) s.Shirts[i] = Palette[rnd.Next(Palette.Length)];
-                return s;
-            }
-        }
-    }
-
     public class GameForm : Form
     {
         enum State { Intro, Playing, Chosen, Result }
 
         const int W = 1100, H = 700, FLOOR_Y = 560;
+        const int NONE = -1;
+
+        static readonly Color Gold = Color.FromArgb(240, 190, 30);
 
         readonly Config cfg;
         Random rnd = new Random();
         List<Scene> scenes = new List<Scene>();
         Scene introScene;
+        Resultado resultado;
         int current;
         State state = State.Intro;
-        int hover = -1;
+        int hover = NONE;
         Point mouse;
-        readonly Timer timer = new Timer();
+
+        readonly Timer pauseTimer = new Timer();   // pausa depois de escolher
+        readonly Timer clockTimer = new Timer();   // cronômetro da cena
+        readonly Stopwatch clock = new Stopwatch();
+        double previewElapsed = -1;
+        int lastTick = int.MaxValue;
 
         Rectangle btnStart = new Rectangle(W / 2 - 130, 520, 260, 70);
-        Rectangle btnAgain = new Rectangle(W / 2 - 280, 600, 260, 64);
-        Rectangle btnExit = new Rectangle(W / 2 + 20, 600, 260, 64);
+        Rectangle btnAgain = new Rectangle(W / 2 - 280, 610, 260, 64);
+        Rectangle btnExit = new Rectangle(W / 2 + 20, 610, 260, 64);
 
-        readonly Font fHuge = new Font("Segoe UI", 64, FontStyle.Bold);
+        readonly Font fHuge = new Font("Segoe UI", 60, FontStyle.Bold);
         readonly Font fTitle = new Font("Segoe UI", 44, FontStyle.Bold);
         readonly Font fBig = new Font("Segoe UI", 22, FontStyle.Bold);
         readonly Font fMed = new Font("Segoe UI", 16);
         readonly Font fMedB = new Font("Segoe UI", 16, FontStyle.Bold);
         readonly Font fSmall = new Font("Segoe UI", 12, FontStyle.Bold);
+        readonly Font fTiny = new Font("Segoe UI", 10, FontStyle.Bold);
 
         public GameForm(Config c)
         {
@@ -208,39 +63,87 @@ namespace JogoDoBanheiro
                     if (s != null) Icon = new Icon(s);
             }
             catch { }
-            introScene = Generator.Make(rnd, 6);
-            timer.Interval = 1100;
-            timer.Tick += OnTimer;
+            introScene = MakeIntroScene(rnd);
+            pauseTimer.Tick += OnPauseEnd;
+            clockTimer.Interval = 40;
+            clockTimer.Tick += OnClock;
         }
+
+        static Scene MakeIntroScene(Random r)
+        {
+            Scene s = Generator.Make(r, SceneKind.Normal, 6, 6);
+            s.HasStall = true;
+            return s;
+        }
+
+        // ---------- Fluxo ----------
 
         void StartGame()
         {
-            scenes = Generator.MakeGame(rnd, cfg.Cenas, cfg.MinMictorios, cfg.MaxMictorios);
+            scenes = Generator.MakeGame(rnd, cfg);
             current = 0;
-            hover = -1;
+            BeginScene();
+        }
+
+        void BeginScene()
+        {
+            hover = NONE;
+            lastTick = int.MaxValue;
             state = State.Playing;
+            clock.Reset();
+            clock.Start();
+            clockTimer.Start();
             Invalidate();
         }
 
-        void OnTimer(object sender, EventArgs e)
+        double Elapsed
         {
-            timer.Stop();
-            current++;
-            hover = -1;
-            if (current >= scenes.Count)
+            get { return previewElapsed >= 0 ? previewElapsed : clock.Elapsed.TotalSeconds; }
+        }
+
+        void OnClock(object sender, EventArgs e)
+        {
+            if (state != State.Playing) { clockTimer.Stop(); return; }
+            Scene s = scenes[current];
+            double remaining = s.TimeLimit - Elapsed;
+            if (remaining <= 0) { Choose(Scene.TimeoutChoice); return; }
+            // tic-tac a cada meio segundo nos últimos 2 segundos
+            int half = (int)Math.Ceiling(remaining * 2);
+            if (remaining <= 2 && half < lastTick)
             {
-                state = State.Result;
-                if (Approved()) System.Media.SystemSounds.Asterisk.Play();
-                else System.Media.SystemSounds.Exclamation.Play();
+                lastTick = half;
+                Sons.TicTac(half % 2 == 0);
             }
-            else state = State.Playing;
             Invalidate();
         }
 
-        bool Approved()
+        void Choose(int choice)
         {
-            foreach (Scene s in scenes) if (!s.Correct) return false;
-            return true;
+            Scene s = scenes[current];
+            clockTimer.Stop();
+            clock.Stop();
+            s.Chosen = choice;
+            s.ElapsedSeconds = choice == Scene.TimeoutChoice ? s.TimeLimit : clock.Elapsed.TotalSeconds;
+            s.Evaluate();
+            if (s.TimedOut) System.Media.SystemSounds.Hand.Play();
+            state = State.Chosen;
+            Cursor = Cursors.Default;
+            pauseTimer.Interval = s.TimedOut ? 1800 : 1100;
+            pauseTimer.Start();
+            Invalidate();
+        }
+
+        void OnPauseEnd(object sender, EventArgs e)
+        {
+            pauseTimer.Stop();
+            current++;
+            if (current < scenes.Count) { BeginScene(); return; }
+            resultado = Ranking.Calcular(scenes, cfg);
+            state = State.Result;
+            hover = NONE;
+            if (resultado.Nivel <= 1) System.Media.SystemSounds.Asterisk.Play();
+            else System.Media.SystemSounds.Exclamation.Play();
+            Invalidate();
         }
 
         // ---------- Entrada ----------
@@ -249,16 +152,18 @@ namespace JogoDoBanheiro
         {
             base.OnMouseMove(e);
             mouse = e.Location;
-            int h = -1;
-            bool overButton = false;
-            if (state == State.Playing) h = HitUrinal(e.Location, scenes[current].N);
-            else if (state == State.Intro) overButton = btnStart.Contains(e.Location);
-            else if (state == State.Result) overButton = btnAgain.Contains(e.Location) || btnExit.Contains(e.Location);
-
-            bool clickable = overButton || (h >= 0 && !scenes[current].Occupied[h]);
+            bool clickable = false;
+            hover = NONE;
+            if (state == State.Playing)
+            {
+                Scene s = scenes[current];
+                hover = HitTest(e.Location, s);
+                clickable = hover == Scene.StallChoice || (hover >= 0 && !s.Occupied[hover]);
+            }
+            else if (state == State.Intro) clickable = btnStart.Contains(e.Location);
+            else if (state == State.Result) clickable = btnAgain.Contains(e.Location) || btnExit.Contains(e.Location);
             Cursor = clickable ? Cursors.Hand : Cursors.Default;
-            hover = h;
-            Invalidate();
+            if (state != State.Playing) Invalidate(); // em jogo o cronômetro já redesenha
         }
 
         protected override void OnMouseClick(MouseEventArgs e)
@@ -274,14 +179,10 @@ namespace JogoDoBanheiro
             else if (state == State.Playing)
             {
                 Scene s = scenes[current];
-                int i = HitUrinal(e.Location, s.N);
-                if (i < 0) return;
-                if (s.Occupied[i]) { System.Media.SystemSounds.Beep.Play(); return; }
-                s.Chosen = i;
-                state = State.Chosen;
-                Cursor = Cursors.Default;
-                timer.Start();
-                Invalidate();
+                int i = HitTest(e.Location, s);
+                if (i == NONE) return;
+                if (i != Scene.StallChoice && s.Occupied[i]) { System.Media.SystemSounds.Beep.Play(); return; }
+                Choose(i);
             }
         }
 
@@ -294,24 +195,27 @@ namespace JogoDoBanheiro
 
         // ---------- Geometria ----------
 
-        static RectangleF SlotRect(int i, int n)
+        static RectangleF SlotRect(int i, Scene s)
         {
-            float margin = 60;
-            float slot = Math.Min(140f, (W - 2 * margin) / n);
-            float x0 = (W - slot * n) / 2f;
+            float left = 60, right = s.HasStall ? W - 215 : W - 60;
+            float slot = Math.Min(140f, (right - left) / s.N);
+            float x0 = left + (right - left - slot * s.N) / 2f;
             return new RectangleF(x0 + i * slot, 170, slot, 450);
         }
 
-        static float UrinalWidth(int n)
+        static readonly RectangleF StallRect = new RectangleF(W - 195, 175, 150, FLOOR_Y + 30 - 175);
+
+        static float UrinalWidth(Scene s)
         {
-            return Math.Min(74f, SlotRect(0, n).Width * 0.62f);
+            return Math.Min(74f, SlotRect(0, s).Width * 0.62f);
         }
 
-        static int HitUrinal(Point p, int n)
+        static int HitTest(Point p, Scene s)
         {
-            for (int i = 0; i < n; i++)
-                if (SlotRect(i, n).Contains(p)) return i;
-            return -1;
+            if (s.HasStall && StallRect.Contains(p)) return Scene.StallChoice;
+            for (int i = 0; i < s.N; i++)
+                if (SlotRect(i, s).Contains(p)) return i;
+            return NONE;
         }
 
         // ---------- Atualização ----------
@@ -335,6 +239,22 @@ namespace JogoDoBanheiro
 
         void OferecerAtualizacao(ReleaseInfo r)
         {
+            // não interrompe uma partida em andamento: espera voltar para a tela inicial ou final
+            if (state == State.Playing || state == State.Chosen)
+            {
+                Timer espera = new Timer();
+                espera.Interval = 1000;
+                espera.Tick += delegate
+                {
+                    if (state == State.Playing || state == State.Chosen) return;
+                    espera.Stop();
+                    espera.Dispose();
+                    OferecerAtualizacao(r);
+                };
+                espera.Start();
+                return;
+            }
+
             string notas = Updater.NotasLimpas(r);
             string msg = "Nova versão disponível: " + r.Versao.ToString(3) +
                          "\nVocê tem a versão " + Updater.AtualTexto + "." +
@@ -365,7 +285,7 @@ namespace JogoDoBanheiro
             });
         }
 
-        // ---------- Desenho ----------
+        // ---------- Desenho: utilitários ----------
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -394,13 +314,26 @@ namespace JogoDoBanheiro
             return p;
         }
 
+        static void FillRound(Graphics g, RectangleF r, float rad, Color c)
+        {
+            using (GraphicsPath p = RoundRect(r, rad))
+            using (SolidBrush b = new SolidBrush(c))
+                g.FillPath(b, p);
+        }
+
         static void DrawText(Graphics g, string s, Font f, Color c, RectangleF r)
+        {
+            DrawText(g, s, f, c, r, StringAlignment.Center);
+        }
+
+        static void DrawText(Graphics g, string s, Font f, Color c, RectangleF r, StringAlignment align)
         {
             using (StringFormat sf = new StringFormat())
             using (SolidBrush b = new SolidBrush(c))
             {
-                sf.Alignment = StringAlignment.Center;
+                sf.Alignment = align;
                 sf.LineAlignment = StringAlignment.Center;
+                sf.Trimming = StringTrimming.EllipsisCharacter;
                 g.DrawString(s, f, b, r, sf);
             }
         }
@@ -412,6 +345,16 @@ namespace JogoDoBanheiro
             DrawText(g, s, f, Color.FromArgb(160, 0, 0, 0), sh);
             DrawText(g, s, f, c, r);
         }
+
+        void Banner(Graphics g, string text, Color bg)
+        {
+            SizeF size = g.MeasureString(text, fMedB);
+            RectangleF r = new RectangleF(W / 2 - size.Width / 2 - 30, 112, size.Width + 60, 52);
+            FillRound(g, r, 14, bg);
+            DrawText(g, text, fMedB, Color.White, r);
+        }
+
+        // ---------- Desenho: cenário ----------
 
         void DrawRoom(Graphics g)
         {
@@ -463,6 +406,20 @@ namespace JogoDoBanheiro
             DrawText(g, number.ToString(), fSmall, Color.White, tag);
         }
 
+        void DrawDivider(Graphics g, float x)
+        {
+            RectangleF r = new RectangleF(x - 6, 262, 12, 250);
+            using (GraphicsPath p = RoundRect(r, 5))
+            {
+                using (LinearGradientBrush lg = new LinearGradientBrush(r, Color.FromArgb(235, 240, 242), Color.FromArgb(170, 182, 188), LinearGradientMode.Horizontal))
+                    g.FillPath(lg, p);
+                using (Pen pen = new Pen(Color.FromArgb(110, 125, 130), 2))
+                    g.DrawPath(pen, p);
+            }
+            using (SolidBrush bracket = new SolidBrush(Color.FromArgb(110, 125, 130)))
+                g.FillRectangle(bracket, x - 9, 270, 18, 8);
+        }
+
         void DrawPerson(Graphics g, float cx, float uw, Color shirt, bool player)
         {
             float s = uw / 70f;
@@ -494,88 +451,163 @@ namespace JogoDoBanheiro
             using (SolidBrush hair = new SolidBrush(Color.FromArgb(70, 45, 30)))
                 g.FillPie(hair, cx - 21 * s, 331, 42 * s, 44, 180, 180);
 
-            if (player)
+            if (player) YouTag(g, cx, 296);
+        }
+
+        void YouTag(Graphics g, float cx, float y)
+        {
+            RectangleF label = new RectangleF(cx - 36, y, 72, 28);
+            FillRound(g, label, 8, Gold);
+            DrawText(g, "VOCÊ", fSmall, Color.Black, label);
+        }
+
+        void DrawStall(Graphics g, bool occupiedByPlayer)
+        {
+            RectangleF r = StallRect;
+            // paredes laterais e porta
+            using (SolidBrush wall = new SolidBrush(Color.FromArgb(70, 95, 105)))
+                g.FillRectangle(wall, r.X, r.Y, r.Width, r.Height - 24);
+            RectangleF door = new RectangleF(r.X + 14, r.Y + 14, r.Width - 28, r.Height - 44);
+            using (LinearGradientBrush lg = new LinearGradientBrush(door, Color.FromArgb(120, 155, 170), Color.FromArgb(85, 115, 128), LinearGradientMode.Horizontal))
+                g.FillRectangle(lg, door);
+            using (Pen pen = new Pen(Color.FromArgb(45, 65, 72), 3))
+                g.DrawRectangle(pen, door.X, door.Y, door.Width, door.Height);
+            // vão embaixo da porta
+            using (SolidBrush legs = new SolidBrush(Color.FromArgb(45, 65, 72)))
             {
-                RectangleF label = new RectangleF(cx - 36, 296, 72, 28);
-                using (GraphicsPath lp = RoundRect(label, 8))
-                using (SolidBrush lb = new SolidBrush(Color.FromArgb(240, 190, 30)))
-                    g.FillPath(lb, lp);
-                DrawText(g, "VOCÊ", fSmall, Color.Black, label);
+                g.FillRectangle(legs, r.X, r.Bottom - 24, 10, 24);
+                g.FillRectangle(legs, r.Right - 10, r.Bottom - 24, 10, 24);
+            }
+            // placa e trinco
+            RectangleF sign = new RectangleF(door.X + door.Width / 2 - 26, door.Y + 30, 52, 30);
+            FillRound(g, sign, 6, Color.White);
+            DrawText(g, "WC", fSmall, Color.FromArgb(45, 65, 72), sign);
+            using (SolidBrush handle = new SolidBrush(Color.FromArgb(210, 215, 220)))
+                g.FillRectangle(handle, door.Right - 22, door.Y + door.Height / 2 - 4, 14, 8);
+            RectangleF lockR = new RectangleF(door.Right - 30, door.Y + door.Height / 2 + 14, 24, 14);
+            FillRound(g, lockR, 4, occupiedByPlayer ? Color.FromArgb(210, 50, 50) : Color.FromArgb(60, 180, 90));
+
+            DrawText(g, "CABINE", fTiny, Color.White, new RectangleF(r.X, r.Y - 2, r.Width, 18));
+            if (occupiedByPlayer)
+            {
+                YouTag(g, r.X + r.Width / 2, door.Y + door.Height / 2 - 14);
+                // pés aparecendo embaixo da porta
+                using (SolidBrush shoe = new SolidBrush(Color.FromArgb(25, 25, 25)))
+                {
+                    g.FillEllipse(shoe, r.X + r.Width / 2 - 24, r.Bottom - 14, 22, 12);
+                    g.FillEllipse(shoe, r.X + r.Width / 2 + 2, r.Bottom - 14, 22, 12);
+                }
             }
         }
 
-        void DrawUrinalRow(Graphics g, Scene s, bool interactive)
+        void Highlight(Graphics g, RectangleF r)
         {
-            float uw = UrinalWidth(s.N);
+            using (GraphicsPath p = RoundRect(r, 16))
+            {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(70, 80, 160, 255)))
+                    g.FillPath(b, p);
+                using (Pen pen = new Pen(Color.FromArgb(200, 60, 130, 230), 3))
+                    g.DrawPath(pen, p);
+            }
+        }
+
+        void DrawBathroom(Graphics g, Scene s, bool interactive)
+        {
+            bool hovering = interactive && state == State.Playing;
+            float uw = UrinalWidth(s);
+
+            if (hovering && hover >= 0 && hover < s.N && !s.Occupied[hover])
+            {
+                RectangleF slot = SlotRect(hover, s);
+                Highlight(g, new RectangleF(slot.X + 4, 176, slot.Width - 8, 440));
+            }
+            if (s.HasStall && hovering && hover == Scene.StallChoice)
+            {
+                RectangleF st = StallRect;
+                st.Inflate(8, 8);
+                Highlight(g, st);
+            }
+
             for (int i = 0; i < s.N; i++)
             {
-                RectangleF slot = SlotRect(i, s.N);
-                float cx = slot.X + slot.Width / 2;
-                if (interactive && state == State.Playing && i == hover && !s.Occupied[i])
-                {
-                    RectangleF hl = new RectangleF(slot.X + 4, 176, slot.Width - 8, 440);
-                    using (GraphicsPath p = RoundRect(hl, 16))
-                    {
-                        using (SolidBrush b = new SolidBrush(Color.FromArgb(70, 80, 160, 255)))
-                            g.FillPath(b, p);
-                        using (Pen pen = new Pen(Color.FromArgb(200, 60, 130, 230), 3))
-                            g.DrawPath(pen, p);
-                    }
-                }
-                DrawUrinal(g, cx, uw, i + 1);
-                if (s.Occupied[i]) DrawPerson(g, cx, uw, s.Shirts[i], false);
-                else if (i == s.Chosen) DrawPerson(g, cx, uw, Color.FromArgb(240, 190, 30), true);
+                RectangleF slot = SlotRect(i, s);
+                DrawUrinal(g, slot.X + slot.Width / 2, uw, i + 1);
             }
+            for (int i = 0; i < s.N - 1; i++)
+                if (s.Divider[i]) DrawDivider(g, SlotRect(i + 1, s).X);
+            for (int i = 0; i < s.N; i++)
+            {
+                RectangleF slot = SlotRect(i, s);
+                float cx = slot.X + slot.Width / 2;
+                if (s.Occupied[i]) DrawPerson(g, cx, uw, s.Shirts[i], false);
+                else if (i == s.Chosen) DrawPerson(g, cx, uw, Gold, true);
+            }
+            if (s.HasStall) DrawStall(g, s.StallChosen);
         }
 
         void DrawHeader(Graphics g, string left, string center)
         {
-            using (SolidBrush bar = new SolidBrush(Color.FromArgb(220, 25, 35, 40)))
+            using (SolidBrush bar = new SolidBrush(Color.FromArgb(225, 25, 35, 40)))
                 g.FillRectangle(bar, 0, 0, W, 90);
-            using (StringFormat sf = new StringFormat())
-            using (SolidBrush b = new SolidBrush(Color.FromArgb(240, 190, 30)))
-            {
-                sf.LineAlignment = StringAlignment.Center;
-                g.DrawString(left, fBig, b, new RectangleF(30, 0, 300, 90), sf);
-            }
+            DrawText(g, left, fBig, Gold, new RectangleF(30, 0, 300, 90), StringAlignment.Near);
             DrawText(g, center, fMed, Color.White, new RectangleF(250, 0, W - 500, 90));
 
-            // progresso
             int n = scenes.Count;
             float dot = 18, gap = 10;
             float x = W - 30 - n * (dot + gap) + gap;
             for (int i = 0; i < n; i++)
             {
-                Color c = i < current ? Color.FromArgb(240, 190, 30)
-                        : i == current ? Color.White : Color.FromArgb(90, 255, 255, 255);
+                Color c = i < current ? Gold : i == current ? Color.White : Color.FromArgb(90, 255, 255, 255);
                 using (SolidBrush b = new SolidBrush(c))
                     g.FillEllipse(b, x + i * (dot + gap), 45 - dot / 2, dot, dot);
             }
         }
 
+        void DrawClock(Graphics g, Scene s)
+        {
+            double remaining = state == State.Playing ? Math.Max(0, s.TimeLimit - Elapsed)
+                             : Math.Max(0, s.TimeLimit - s.ElapsedSeconds);
+            float frac = (float)(remaining / s.TimeLimit);
+            using (SolidBrush bg = new SolidBrush(Color.FromArgb(200, 20, 28, 32)))
+                g.FillRectangle(bg, 0, 90, W, 16);
+            Color c = frac > 0.5f ? Color.FromArgb(70, 200, 100)
+                    : frac > 0.25f ? Color.FromArgb(240, 190, 30)
+                    : Color.FromArgb(230, 60, 60);
+            using (SolidBrush b = new SolidBrush(c))
+                g.FillRectangle(b, 0, 92, W * frac, 12);
+            RectangleF tr = new RectangleF(W - 84, 104, 74, 30);
+            FillRound(g, tr, 8, Color.FromArgb(200, 20, 28, 32));
+            DrawText(g, remaining.ToString("0.0") + " s", fSmall, c, tr);
+        }
+
         void DrawScene(Graphics g)
         {
             Scene s = scenes[current];
-            DrawUrinalRow(g, s, true);
-            DrawHeader(g, "CENA " + (current + 1) + " DE " + scenes.Count, "Clique no mictório que você vai usar");
+            DrawBathroom(g, s, true);
+
+            if (s.TimedOut)
+            {
+                using (SolidBrush puddle = new SolidBrush(Color.FromArgb(190, 240, 205, 40)))
+                    g.FillEllipse(puddle, W / 2 - 150, FLOOR_Y + 60, 300, 46);
+            }
+
+            DrawHeader(g, "CENA " + (current + 1) + " DE " + scenes.Count, "Clique onde você vai mijar");
+            DrawClock(g, s);
 
             if (state == State.Chosen)
             {
-                RectangleF r = new RectangleF(W / 2 - 220, 104, 440, 56);
-                using (GraphicsPath p = RoundRect(r, 14))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(220, 25, 35, 40)))
-                    g.FillPath(b, p);
-                DrawText(g, "Escolha registrada...", fMedB, Color.White, r);
+                if (s.TimedOut) Banner(g, "Tempo esgotado! Não aguentou e mijou na calça...", Color.FromArgb(230, 190, 40, 40));
+                else Banner(g, "Escolha registrada...", Color.FromArgb(225, 25, 35, 40));
             }
-            else if (hover >= 0 && s.Occupied[hover])
+            else if (hover >= 0 && hover < s.N && s.Occupied[hover])
             {
                 RectangleF r = new RectangleF(mouse.X - 60, mouse.Y - 50, 120, 34);
-                using (GraphicsPath p = RoundRect(r, 10))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(230, 180, 40, 40)))
-                    g.FillPath(b, p);
+                FillRound(g, r, 10, Color.FromArgb(230, 180, 40, 40));
                 DrawText(g, "Ocupado!", fSmall, Color.White, r);
             }
         }
+
+        // ---------- Desenho: telas ----------
 
         void Overlay(Graphics g, int alpha)
         {
@@ -597,12 +629,12 @@ namespace JogoDoBanheiro
 
         void DrawIntro(Graphics g)
         {
-            DrawUrinalRow(g, introScene, false);
+            DrawBathroom(g, introScene, false);
             Overlay(g, 190);
-            ShadowText(g, cfg.Titulo, fTitle, Color.FromArgb(240, 190, 30), new RectangleF(0, 70, W, 90));
+            ShadowText(g, cfg.Titulo, fTitle, Gold, new RectangleF(0, 70, W, 90));
             DrawText(g, cfg.Subtitulo, fMed, Color.White, new RectangleF(0, 160, W, 40));
 
-            RectangleF box = new RectangleF(W / 2 - 330, 230, 660, 240);
+            RectangleF box = new RectangleF(W / 2 - 340, 225, 680, 255);
             using (GraphicsPath p = RoundRect(box, 18))
             {
                 using (SolidBrush b = new SolidBrush(Color.FromArgb(200, 35, 45, 50))) g.FillPath(b, p);
@@ -610,101 +642,124 @@ namespace JogoDoBanheiro
             }
             string rules =
                 "Você vai passar por " + cfg.Cenas + " cenas de banheiro.\n\n" +
-                "Em cada uma, alguns mictórios já estão ocupados.\n" +
-                "Clique no mictório que você escolheria.\n\n" +
-                "No final, o veredito.";
+                "Em cada uma, clique no mictório onde você vai mijar.\n" +
+                "Às vezes a cabine também é uma opção.\n\n" +
+                "Decida rápido: o tempo está correndo.\n" +
+                "No final, o seu ranking.";
             DrawText(g, rules, fMed, Color.White, box);
 
-            DrawButton(g, btnStart, "COMEÇAR", Color.FromArgb(240, 190, 30));
+            DrawButton(g, btnStart, "COMEÇAR", Gold);
             DrawText(g, "v" + Updater.AtualTexto, fSmall, Color.FromArgb(150, 255, 255, 255), new RectangleF(W - 110, H - 40, 100, 30));
         }
 
+        static readonly Color[] TierColors = {
+            Color.FromArgb(245, 200, 40),   // macho alfa
+            Color.FromArgb(70, 210, 100),   // macho
+            Color.FromArgb(90, 170, 240),   // em treinamento
+            Color.FromArgb(240, 140, 50),   // suspeito
+            Color.FromArgb(255, 90, 170)    // reprovado
+        };
+
         void DrawResult(Graphics g)
         {
-            Overlay(g, 215);
-            bool ok = Approved();
-            Color main = ok ? Color.FromArgb(70, 210, 100) : Color.FromArgb(255, 90, 170);
-            ShadowText(g, ok ? cfg.MsgAprovado : cfg.MsgReprovado, fHuge, main, new RectangleF(0, 40, W, 120));
-            DrawText(g, ok ? cfg.DetalheAprovado : cfg.DetalheReprovado, fMed, Color.White, new RectangleF(0, 165, W, 40));
+            Overlay(g, 220);
+            Resultado r = resultado;
+            Color main = TierColors[r.Nivel];
 
-            int hits = 0;
-            foreach (Scene s in scenes) if (s.Correct) hits++;
-            DrawText(g, "Acertos: " + hits + " de " + scenes.Count, fMedB, Color.FromArgb(240, 190, 30), new RectangleF(0, 210, W, 36));
+            Font titleFont = g.MeasureString(r.Titulo, fHuge).Width < W - 80 ? fHuge : fTitle;
+            ShadowText(g, r.Titulo, titleFont, main, new RectangleF(0, 22, W, 110));
+            DrawText(g, r.Mensagem, fMed, Color.White, new RectangleF(0, 128, W, 36));
+            string placar = "Pontuação: " + r.Total + " de " + r.Maximo;
+            if (r.Grave) placar += "   •   Falta grave na cena " + (r.CenaGrave + 1);
+            DrawText(g, placar, fMedB, Gold, new RectangleF(0, 164, W, 34));
 
-            float top = 262, rowH = Math.Min(60f, 315f / scenes.Count);
+            float top = 210, rowH = Math.Min(64f, 385f / scenes.Count);
             for (int i = 0; i < scenes.Count; i++)
-            {
-                Scene s = scenes[i];
-                float y = top + i * rowH;
-                RectangleF row = new RectangleF(140, y + 4, W - 280, rowH - 8);
-                using (GraphicsPath p = RoundRect(row, 10))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(150, 40, 50, 58)))
-                    g.FillPath(b, p);
+                DrawResultRow(g, scenes[i], i, new RectangleF(90, top + i * rowH + 3, W - 180, rowH - 6));
 
-                using (StringFormat sf = new StringFormat())
-                using (SolidBrush wb = new SolidBrush(Color.White))
-                {
-                    sf.LineAlignment = StringAlignment.Center;
-                    g.DrawString("Cena " + (i + 1), fMedB, wb, new RectangleF(160, row.Y, 110, row.Height), sf);
-                }
-
-                // mini mapa: cinza = livre, azul = ocupado, amarelo = sua escolha
-                float sq = Math.Min(28f, row.Height - 14), gap = 6;
-                float mx = 280;
-                for (int k = 0; k < s.N; k++)
-                {
-                    Color c = s.Occupied[k] ? Color.FromArgb(70, 120, 200)
-                            : k == s.Chosen ? Color.FromArgb(240, 190, 30)
-                            : Color.FromArgb(200, 205, 210);
-                    RectangleF r = new RectangleF(mx + k * (sq + gap), row.Y + (row.Height - sq) / 2, sq, sq);
-                    using (GraphicsPath p = RoundRect(r, 5))
-                    using (SolidBrush b = new SolidBrush(c))
-                        g.FillPath(b, p);
-                }
-
-                string verdict = s.Correct ? "✔  Manteve distância" : "✘  Colou do lado de alguém";
-                Color vc = s.Correct ? Color.FromArgb(90, 220, 120) : Color.FromArgb(255, 110, 180);
-                using (StringFormat sf = new StringFormat())
-                using (SolidBrush vb = new SolidBrush(vc))
-                {
-                    sf.Alignment = StringAlignment.Far;
-                    sf.LineAlignment = StringAlignment.Center;
-                    g.DrawString(verdict, fMedB, vb, new RectangleF(row.X, row.Y, row.Width - 20, row.Height), sf);
-                }
-            }
-
-            DrawButton(g, btnAgain, "JOGAR DE NOVO", Color.FromArgb(240, 190, 30));
+            DrawButton(g, btnAgain, "JOGAR DE NOVO", Gold);
             DrawButton(g, btnExit, "SAIR", Color.FromArgb(200, 205, 210));
         }
 
-        // Usado só para gerar imagens de prévia durante o desenvolvimento.
+        void DrawResultRow(Graphics g, Scene s, int index, RectangleF row)
+        {
+            FillRound(g, row, 10, s.Grave ? Color.FromArgb(170, 110, 30, 60) : Color.FromArgb(150, 40, 50, 58));
+            DrawText(g, "Cena " + (index + 1), fMedB, Color.White, new RectangleF(row.X + 16, row.Y, 100, row.Height), StringAlignment.Near);
+
+            // mini mapa: cinza = livre, azul = ocupado, amarelo = você; traço branco = divisória; porta = cabine
+            float sq = Math.Min(24f, row.Height - 16), gap = 5;
+            float mx = row.X + 116, my = row.Y + (row.Height - sq) / 2;
+            for (int k = 0; k < s.N; k++)
+            {
+                Color c = s.Occupied[k] ? Color.FromArgb(70, 120, 200)
+                        : k == s.Chosen ? Gold
+                        : Color.FromArgb(200, 205, 210);
+                FillRound(g, new RectangleF(mx + k * (sq + gap), my, sq, sq), 5, c);
+                if (k < s.N - 1 && s.Divider[k])
+                    using (SolidBrush d = new SolidBrush(Color.White))
+                        g.FillRectangle(d, mx + k * (sq + gap) + sq + 1, my - 4, 3, sq + 8);
+            }
+            if (s.HasStall)
+            {
+                RectangleF st = new RectangleF(mx + s.N * (sq + gap) + 8, my - 3, sq * 0.8f, sq + 6);
+                FillRound(g, st, 3, s.StallChosen ? Gold : Color.FromArgb(120, 155, 170));
+                DrawText(g, "C", fTiny, Color.FromArgb(30, 40, 45), st);
+            }
+
+            string comment = s.Comment + (s.Bonus ? "  + Decidido" : "");
+            Color cc = s.Grave ? Color.FromArgb(255, 110, 180)
+                     : s.Points >= 100 ? Color.FromArgb(90, 220, 120)
+                     : s.Points > 0 ? Color.FromArgb(240, 200, 90)
+                     : Color.FromArgb(255, 130, 110);
+            DrawText(g, comment, fSmall, cc, new RectangleF(row.X + 470, row.Y, row.Width - 470 - 80, row.Height), StringAlignment.Near);
+            DrawText(g, s.Points.ToString(), fBig, Color.White, new RectangleF(row.Right - 90, row.Y, 74, row.Height), StringAlignment.Far);
+        }
+
+        // ---------- Prévia (só para desenvolvimento) ----------
+
+        // mode: intro | normal | vazio | divisorias | socabine | timeout | result | result-bom
         public static void SavePreview(string path, string mode, int seed)
         {
             GameForm f = new GameForm(new Config());
             f.rnd = new Random(seed);
-            f.introScene = Generator.Make(f.rnd, 6);
+            f.introScene = MakeIntroScene(f.rnd);
             if (mode != "intro")
             {
-                f.StartGame();
-                if (mode == "scene" || mode == "chosen")
-                {
-                    f.current = 3;
-                    Scene s = f.scenes[3];
-                    if (mode == "chosen")
-                    {
-                        for (int i = 0; i < s.N; i++) if (!s.Occupied[i]) { s.Chosen = i; break; }
-                        f.state = State.Chosen;
-                    }
-                }
-                else
+                f.scenes = Generator.MakeGame(f.rnd, f.cfg);
+                if (mode.StartsWith("result"))
                 {
                     foreach (Scene s in f.scenes)
                     {
-                        List<int> free = new List<int>();
-                        for (int i = 0; i < s.N; i++) if (!s.Occupied[i]) free.Add(i);
-                        s.Chosen = free[f.rnd.Next(free.Count)];
+                        if (mode == "result-bom") s.Chosen = BestChoice(s);
+                        else
+                        {
+                            List<int> options = new List<int>();
+                            for (int i = 0; i < s.N; i++) if (!s.Occupied[i]) options.Add(i);
+                            if (s.HasStall) options.Add(Scene.StallChoice);
+                            s.Chosen = options[f.rnd.Next(options.Count)];
+                        }
+                        s.ElapsedSeconds = f.rnd.NextDouble() * s.TimeLimit;
+                        s.Evaluate();
                     }
+                    f.resultado = Ranking.Calcular(f.scenes, f.cfg);
+                    f.current = f.scenes.Count;
                     f.state = State.Result;
+                }
+                else
+                {
+                    SceneKind kind = mode == "vazio" ? SceneKind.Vazio : mode == "divisorias" ? SceneKind.Divisorias
+                                   : mode == "socabine" ? SceneKind.SoCabine : SceneKind.Normal;
+                    f.current = Math.Max(0, f.scenes.FindIndex(delegate(Scene s) { return s.Kind == kind; }));
+                    f.state = State.Playing;
+                    f.previewElapsed = f.scenes[f.current].TimeLimit * 0.6;
+                    if (mode == "timeout")
+                    {
+                        Scene s = f.scenes[f.current];
+                        s.Chosen = Scene.TimeoutChoice;
+                        s.ElapsedSeconds = s.TimeLimit;
+                        s.Evaluate();
+                        f.state = State.Chosen;
+                    }
                 }
             }
             using (Bitmap bmp = new Bitmap(W, H))
@@ -713,6 +768,16 @@ namespace JogoDoBanheiro
                 bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
             }
             f.Dispose();
+        }
+
+        public static int BestChoice(Scene s)
+        {
+            if (!s.HasSafeUrinal) return s.HasStall ? Scene.StallChoice : 0;
+            if (s.OccupiedCount == 0) return 0;
+            int best = -1;
+            for (int i = 0; i < s.N; i++)
+                if (s.IsSafe(i) && (best < 0 || s.Safety(i) > s.Safety(best))) best = i;
+            return best;
         }
     }
 
