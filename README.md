@@ -1,4 +1,4 @@
-# Teste do Mictório
+# Jogo do Banheiro
 
 Jogo de PC (Windows) em que você entra no banheiro e escolhe em qual mictório vai mijar.
 São 5 cenas, cada uma com 2 a 10 mictórios e alguns já ocupados (sorteados a cada partida).
@@ -8,7 +8,7 @@ Acertou todas → veredito positivo. Errou qualquer uma → veredito negativo.
 
 ## Jogar
 
-Baixe `dist/TesteDoMictorio.exe` e dê dois cliques. Não precisa instalar nada
+Baixe `dist/JogoDoBanheiro.exe` e dê dois cliques. Não precisa instalar nada
 (usa o .NET Framework 4 que já vem no Windows 10/11).
 
 - Clique no mictório escolhido.
@@ -29,7 +29,7 @@ Na primeira execução é criado um `config.ini` ao lado do `.exe`. Nele dá par
 ## Compilar
 
 Rode `build.bat`. Ele usa o compilador C# que já vem no Windows
-(`%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`) e gera `dist\TesteDoMictorio.exe`.
+(`%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`) e gera `dist\JogoDoBanheiro.exe`.
 
 ## Estrutura
 

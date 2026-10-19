@@ -7,12 +7,12 @@ using System.IO;
 using System.Text;
 using System.Windows.Forms;
 
-namespace TesteDoMictorio
+namespace JogoDoBanheiro
 {
     // Textos e parâmetros do jogo. Lidos de config.ini (criado automaticamente ao lado do .exe).
     public class Config
     {
-        public string Titulo = "TESTE DO MICTÓRIO";
+        public string Titulo = "JOGO DO BANHEIRO";
         public string Subtitulo = "Entre no banheiro e escolha onde você vai mijar.";
         public string MsgAprovado = "MACHO!";
         public string DetalheAprovado = "Respeitou o código sagrado do mictório em todas as cenas.";
@@ -69,7 +69,7 @@ namespace TesteDoMictorio
         public string ToIni()
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("# Configuração do Teste do Mictório");
+            sb.AppendLine("# Configuração do Jogo do Banheiro");
             sb.AppendLine("# Edite os textos à vontade. Use \\n para quebrar linha.");
             sb.AppendLine("titulo=" + Titulo);
             sb.AppendLine("subtitulo=" + Subtitulo);
