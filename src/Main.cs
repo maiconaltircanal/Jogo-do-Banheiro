@@ -308,6 +308,57 @@ namespace JogoDoBanheiro
             return -1;
         }
 
+        // ---------- Atualização ----------
+
+        public bool VerificarAtualizacao = true;
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (!VerificarAtualizacao) return;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                ReleaseInfo r = null;
+                try { r = Updater.BuscarUltima(); }
+                catch { return; } // sem internet ou sem Release publicada: segue o jogo normal
+                if (!Updater.EhMaisNova(r)) return;
+                try { BeginInvoke(new Action(delegate { OferecerAtualizacao(r); })); }
+                catch (InvalidOperationException) { } // janela já fechada
+            });
+        }
+
+        void OferecerAtualizacao(ReleaseInfo r)
+        {
+            string notas = Updater.NotasLimpas(r);
+            string msg = "Nova versão disponível: " + r.Versao.ToString(3) +
+                         "\nVocê tem a versão " + Updater.AtualTexto + "." +
+                         (notas.Length > 0 ? "\n\nNovidades:\n" + notas : "") +
+                         "\n\nAtualizar agora?";
+            if (MessageBox.Show(this, msg, cfg.Titulo, MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+
+            Cursor = Cursors.WaitCursor;
+            Text = cfg.Titulo + " - baixando atualização...";
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                string setup = null;
+                string erro = null;
+                try { setup = Updater.Baixar(r); }
+                catch (Exception ex) { erro = ex.Message; }
+                BeginInvoke(new Action(delegate
+                {
+                    Cursor = Cursors.Default;
+                    Text = cfg.Titulo;
+                    if (erro != null)
+                    {
+                        MessageBox.Show(this, "Não foi possível atualizar:\n" + erro, cfg.Titulo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    Updater.Instalar(setup);
+                    Close(); // o instalador substitui o jogo e abre a versão nova
+                }));
+            });
+        }
+
         // ---------- Desenho ----------
 
         protected override void OnPaint(PaintEventArgs e)
@@ -559,6 +610,7 @@ namespace JogoDoBanheiro
             DrawText(g, rules, fMed, Color.White, box);
 
             DrawButton(g, btnStart, "COMEÇAR", Color.FromArgb(240, 190, 30));
+            DrawText(g, "v" + Updater.AtualTexto, fSmall, Color.FromArgb(150, 255, 255, 255), new RectangleF(W - 110, H - 40, 100, 30));
         }
 
         void DrawResult(Graphics g)
@@ -661,11 +713,13 @@ namespace JogoDoBanheiro
     static class Program
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Config c = Config.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.ini"));
-            Application.Run(new GameForm(c));
+            GameForm form = new GameForm(c);
+            form.VerificarAtualizacao = Array.IndexOf(args, "--sem-atualizacao") < 0;
+            Application.Run(form);
         }
     }
 }
