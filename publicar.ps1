@@ -36,7 +36,7 @@ $vc = $vc -replace 'AssemblyFileVersion\("[^"]*"\)', "AssemblyFileVersion(`"$Ver
 [IO.File]::WriteAllText("$PSScriptRoot\src\Versao.cs", $vc, (New-Object Text.UTF8Encoding $true))
 
 Passo "Compilando o jogo"
-cmd /c build.bat
+& "$PSScriptRoot\build.bat"
 if ($LASTEXITCODE -ne 0) { Falha "Falha na compilacao." }
 
 Passo "Gerando o instalador"
