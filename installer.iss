@@ -25,6 +25,7 @@ OutputBaseFilename=JogoDoBanheiro-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=assets\icone.ico
 UninstallDisplayIcon={app}\JogoDoBanheiro.exe
 UninstallDisplayName=Jogo do Banheiro
 CloseApplications=yes

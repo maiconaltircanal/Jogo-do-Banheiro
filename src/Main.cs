@@ -202,6 +202,12 @@ namespace JogoDoBanheiro
             DoubleBuffered = true;
             BackColor = Color.Black;
             KeyPreview = true;
+            try
+            {
+                using (Stream s = typeof(GameForm).Assembly.GetManifestResourceStream("icone.ico"))
+                    if (s != null) Icon = new Icon(s);
+            }
+            catch { }
             introScene = Generator.Make(rnd, 6);
             timer.Interval = 1100;
             timer.Tick += OnTimer;

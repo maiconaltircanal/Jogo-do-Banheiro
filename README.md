@@ -1,4 +1,12 @@
-# Jogo do Banheiro
+<p align="center"><img src="assets/icone.png" width="128" alt="Ícone do Jogo do Banheiro"></p>
+
+<h1 align="center">Jogo do Banheiro</h1>
+
+<p align="center">
+  <a href="https://github.com/maiconaltircanal/Jogo-do-Banheiro/releases/latest"><b>⬇ Baixar o instalador</b></a>
+</p>
+
+![Tela do jogo](assets/tela-jogo.png)
 
 Jogo de PC (Windows) em que você entra no banheiro e escolhe em qual mictório vai mijar.
 São 5 cenas, cada uma com 2 a 10 mictórios e alguns já ocupados (sorteados a cada partida).
@@ -56,6 +64,7 @@ e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.
 src/Main.cs      jogo (regras, geração das cenas, desenho)
 src/Updater.cs   busca e instala atualizações a partir das Releases
 src/Versao.cs    número da versão (gravado pelo publicar.bat)
+assets/          ícone e imagens (tools\gerar-icone.ps1 redesenha o ícone)
 installer.iss    script do instalador (Inno Setup)
 build.bat        compila o jogo
 publicar.bat     publica uma versão nova
