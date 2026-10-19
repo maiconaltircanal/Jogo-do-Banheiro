@@ -26,6 +26,8 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 SetupIconFile=assets\icone.ico
+; Faz o Windows renovar o cache de icones ao terminar (senao atalhos podem mostrar o icone antigo).
+ChangesAssociations=yes
 UninstallDisplayIcon={app}\JogoDoBanheiro.exe
 UninstallDisplayName=Jogo do Banheiro
 CloseApplications=yes
